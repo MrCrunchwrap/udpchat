@@ -1,0 +1,162 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>UDP Chat</title>
+  <script>
+
+var request = null, session = null, user = null, interval = null;
+
+function $(id) {
+	return document.getElementById(id);
+}
+
+function postEscape(val) {
+	return encodeURIComponent(val).replace(/%20/g, "+")
+}
+
+function logoutClient() {
+	clearInterval(interval);
+	user = null;
+	session = null;
+	$("loggedIn").checked = false;
+	$("password").disabled = false;
+	$("username").disabled = false;
+	$("domain").disabled = false;
+	$("port").disabled = false;
+	$("display").value = "";
+	alert("Goodbye!");
+}
+
+function respond_login() {
+	if( request.readyState != 4 ) return;
+	response = JSON.parse(request.responseText);
+	if( response.response != "ERROR" ) {
+		session = response.session;
+		user = $("username").value;
+		interval = setInterval(update_user,2000);
+		$("loggedIn").checked = true;
+		$("password").disabled = true;
+		$("username").disabled = true;
+		$("domain").disabled = true;
+		$("port").disabled = true;
+		$("display").value = "";
+		for (var i in response.users) {
+			if(!(typeof response.users[i].name === "undefined")) {
+				$("display").value += response.users[i].name + " is online\n";
+			}
+			else {
+				$("display").value += "No one is here right now\n";
+			}
+		}
+	}
+	else {
+		if (response.session == "failed") {
+			alert("Incorrect username/password");
+		}
+		else if (response.session == "invalid") {
+			alert("User already logged in");
+		}
+	}
+}
+
+function update_user() {
+	request = new XMLHttpRequest();
+	request.onreadystatechange = respond_update;
+	request.open("POST", "udpchat.cgi", true /* async? */ );
+	request.setRequestHeader("Content-type","application/x-www-form-urlencoded");
+	request.send( "action=update&session=" + postEscape( session ) +
+					"&username=" + postEscape( user ));
+}
+
+function respond_message() {
+	if( request.readyState != 4 ) return;
+	response = JSON.parse(request.responseText);
+	if ( response.session == "expired" ) {
+		logoutClient();
+		alert("Session expired, please login again");
+	}
+}
+
+function respond_update() {
+	if( request.readyState != 4 ) return;
+	response = JSON.parse(request.responseText);
+	if( response.response != "ERROR" ) {
+		for (var i in response.chats) {
+			if(!(typeof response.chats[i].message === "undefined")) {
+				$("display").value += response.chats[i].message + "\n";
+			}
+		}
+	}
+	else {
+		if ( response.session == "expired" ) {
+			logoutClient();
+			alert("Session expired, please login again");
+		}
+	}
+}
+
+function respond_logout() {
+	if( request.readyState != 4 ) return;
+	logoutClient();
+}
+	
+function submit_logout() {
+	request = new XMLHttpRequest();
+	request.onreadystatechange = respond_logout;
+	request.open("POST", "udpchat.cgi", true /* async? */ );
+	request.setRequestHeader("Content-type","application/x-www-form-urlencoded");
+	request.send( "action=logout&username=" + postEscape( user ) +
+					"&session=" + postEscape( session ) );
+}
+
+function submit_login() {
+	request = new XMLHttpRequest();
+	request.onreadystatechange = respond_login;
+	request.open("POST", "udpchat.cgi", true /* async? */ );
+	request.setRequestHeader("Content-type","application/x-www-form-urlencoded");
+	request.send( "action=login&username=" + postEscape( $("username").value ) +
+				"&password=" + postEscape( $("password").value ) +
+				"&domain=" + postEscape( $("domain").value ) +
+				"&port=" + postEscape( $("port").value ));
+}
+
+function submit_message() {
+	if (user && session) {
+		request = new XMLHttpRequest();
+		request.onreadystatechange = respond_message;
+		request.open("POST", "udpchat.cgi", true /* async? */ );
+		request.setRequestHeader("Content-type","application/x-www-form-urlencoded");
+		request.send( "action=send&username=" + postEscape( user) + "&session=" + postEscape( session ) +
+					"&message=" + postEscape ( $("message").value ));
+		$("display").value += user + ": " + $("message").value + "\n";
+		$("message").value = "";
+	} else {
+		alert( "You are not logged in" );
+	}
+}
+
+function searchKeyPress(e) {
+        // look for window.event in case event isn't passed in
+        if (typeof e == 'undefined' && window.event) { e = window.event; }
+        if (e.keyCode == 13) {
+		$("send").click();
+        }
+}
+  </script>
+</head>
+
+<body>
+  <form>
+	<input name="username" id="username" size="25" type="text">Username<br>
+	<input name="password" id="password" size="25" type="password">Password<br>
+	<input name="domain" id="domain" size="25" type="text" value="cgi.cselabs.umn.edu">Server Domain<br>
+	<input name="port" id="port" size="25" type="text" value="9001">Server Port<br>
+	<input type="button" name="login" value="Login" onclick="submit_login()">
+	<input type="checkbox" id="loggedIn" name="loggedIn" onclick="this.checked=!this.checked">
+	<input type="button" name="logout" value="Logout" onclick="submit_logout()"><br>
+	<textarea name="display" id="display" rows="24" cols="68" readonly></textarea><br>
+	<input name="message" id="message" size="64" maxlength="1024" type="text" placeholder="Chat here..." onkeypress="searchKeyPress(event);">
+	<input type="button" id="send" name="send" value="Send" onclick="submit_message()"><p></p>
+  </form>
+
+
+</body></html>
